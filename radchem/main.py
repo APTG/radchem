@@ -9,6 +9,10 @@ from model import RadChemModel
 logger = logging.getLogger(__name__)
 
 
+NA = 6.02214129e23      # Avogadro constant
+EVJ = 6.24150934e18     # eV per joule
+
+
 class Source():
 
     def __init__(self, dose=2.0, duration=10.0, plength=1e-6, pfreq=1e5):
@@ -70,21 +74,35 @@ class Source():
     def beam(self, time):
         """
         Calculate dose rate at time t, taking the given pulse structure into account.
+
+        Returns : dose rate at time t in Gy/sec, and zero dose rate if time is < 0 sec
         """
+        if time < 0.0:
+            return 0.0
+
         npulse = int(time / self.cyclelength)  # current pulse number
         phase = (time - (npulse * self.cyclelength)) / self.cyclelength
         if phase < self.duty:
-            return self.pdoserate
+            beam = self.pdoserate
         else:
-            return 0.0
+            beam = 0.0
+        return beam
 
 
-def dCdt(C, t, model):
+def dCdt(C, t, model, source=None):
     """
     C_i(t) : given array of concentration of species i at time t [mol/liter]
     t      : time [sec]
+    dDdt   : doserate at time t [Gy/sec]
     """
     dCdt = np.zeros(model.nspecies)
+    # check first if any new ions are created due to irradiation
+    if source:
+        dDdt = source.beam(t)
+        if dDdt > 0.0:
+            for k in range(model.nspecies):
+                dCdt[k] = dDdt * model.gval[k] * 0.01 * EVJ / NA  # omitted times rho, assuming 1 kg = 1 liter
+
     # build rate constants for all species:
     for k in range(model.nspecies):
         # loop over each possible equation
@@ -108,13 +126,14 @@ def dCdt(C, t, model):
     return dCdt
 
 
-def C(t, C0, model):
+def C(t, C0, model, source=None):
     """
     t      : array with time steps to calculate [sec]
     C_i(t) : array of concentrations of species i at time t [mol / l]
     C0     : array with starting condition for each species concentation [mol / l]
+    source : beam source
     """
-    sol = odeint(dCdt, C0, t, args=(model,))
+    sol = odeint(dCdt, C0, t, args=(model, source))
     return sol
 
 
@@ -144,10 +163,11 @@ def main(args=sys.argv[1:]):
     """
 
     dose = 2.0          # Gy
-    duration = 10.0     # sec
-    pulsewidth = 0.150  # sec
-    freq = 2.0          # Hz
-    # step = 0.01         # sec
+    t0 = -1.0           # sec
+    duration = 2.0      # sec
+    pulsewidth = 0.010  # sec
+    freq = 13.0         # Hz
+    steps = 1001
 
     s = Source(dose, duration, pulsewidth, freq)
     print(s)
@@ -159,13 +179,20 @@ def main(args=sys.argv[1:]):
 
     symb = RadChemModel.symbol
 
-    t = np.linspace(0, 1e-3, 101)
-    result = C(t, C0, RadChemModel)
+    t = np.linspace(t0, duration, steps)
 
-    r = result[:, symb["H+"]]
+    result = C(t, C0, RadChemModel, s)
 
-    for row in zip(t, r):
-        print("{} {}".format(row[0], row[1]))
+    # select results to be printed
+
+    a = result[:, symb["H+"]]
+    b = result[:, symb["OH-"]]
+    c = result[:, symb["e-"]]
+    d = result[:, symb["OH"]]
+
+    for i, tt in enumerate(t):
+        # print(tt, s.beam(tt), a[i], b[i], c[i], d[i])
+        print(tt, s.beam(tt), a[i], b[i])
 
 
 if __name__ == '__main__':
