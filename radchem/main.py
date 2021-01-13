@@ -3,6 +3,7 @@ import logging
 
 import numpy as np
 from scipy.integrate import odeint
+# from scipy.integrate import solve_ivp
 
 from model import RadChemModel
 
@@ -14,6 +15,9 @@ EVJ = 6.24150934e18     # eV per joule
 
 
 class Source():
+    """
+    Class for defining a beam source.
+    """
 
     def __init__(self, dose=2.0, duration=10.0, plength=1e-6, pfreq=1e5):
         """
@@ -28,10 +32,6 @@ class Source():
 
         self.pfreq = pfreq
 
-        if plength > 1.0/pfreq:
-            logger.error("Pulse length cannot be larger than one period of pulse frequency.")
-            exit()
-
         # calculated from inital values
         self.doserate = dose / duration  # [Gy/sec]
         if pfreq == "DC":
@@ -43,6 +43,9 @@ class Source():
             self.pdoserate = self.doserate
             self.cyclelength = duration
         else:
+            if plength > 1.0 / pfreq:
+                logger.error("Pulse length cannot be larger than one period of pulse frequency.")
+                exit()
             self.plength = plength
             self.pulsecount = int(duration * pfreq)  # total number of pulses given
             self.beamon = self.pulsecount * plength  # total time beam is ON
@@ -65,23 +68,25 @@ class Source():
 
         _str += "\n"
         _str += ("# Average dose rate      : {:.3f} Gy/s\n".format(self.doserate))
-        _str += ("# Micropulse dose rate    : {:.3f} Gy/s\n".format(self.pdoserate))
+        _str += ("# Micropulse dose rate   : {:.3f} Gy/s\n".format(self.pdoserate))
         _str += ("# Total number of pulses : {:.3e}\n".format(self.pulsecount))
         _str += ("# Actual beam ON time    : {:.3f} sec\n".format(self.beamon))
         _str += ("# Actual beam OFF time   : {:.3f} sec\n".format(self.beamoff))
         return _str
 
-    def beam(self, time):
+    def beam(self, t):
         """
         Calculate dose rate at time t, taking the given pulse structure into account.
 
-        Returns : dose rate at time t in Gy/sec, and zero dose rate if time is < 0 sec
+        Returns : dose rate dD(t)/Dt at time t in Gy/sec, and zero if t < 0 sec
         """
-        if time < 0.0:
+        if t < 0.0:
+            return 0.0
+        if t > 1.0:
             return 0.0
 
-        npulse = int(time / self.cyclelength)  # current pulse number
-        phase = (time - (npulse * self.cyclelength)) / self.cyclelength
+        npulse = int(t / self.cyclelength)  # current pulse number
+        phase = (t - (npulse * self.cyclelength)) / self.cyclelength
         if phase < self.duty:
             beam = self.pdoserate
         else:
@@ -89,16 +94,24 @@ class Source():
         return beam
 
 
+# def dCdt(t, C, model, source=None):    # solve_ivp needs (t,C,...)
 def dCdt(C, t, model, source=None):
     """
+    Differential equation describing the change in concentration as a function of time.
+
+    Input
     C_i(t) : given array of concentration of species i at time t [mol/liter]
     t      : time [sec]
-    dDdt   : doserate at time t [Gy/sec]
+    dDdt   : given doserate at time t [Gy/sec]
+
+    Returns:
+    dCi(t)/dt : change in concentration of all species i at time t. [mol/liter/sec]
     """
     dCdt = np.zeros(model.nspecies)
     # check first if any new ions are created due to irradiation
     if source:
         dDdt = source.beam(t)
+        # print("# t, dDdt:", t, dDdt)
         if dDdt > 0.0:
             for k in range(model.nspecies):
                 dCdt[k] = dDdt * model.gval[k] * 0.01 * EVJ / NA  # omitted times rho, assuming 1 kg = 1 liter
@@ -119,11 +132,22 @@ def dCdt(C, t, model, source=None):
                 for i in range(model.nspecies):
                     m = model.nmatrix[j][i]
                     if m == -1:
-                        rate *= C[i]  # /* first order kinetics */
-                    if m == -2:
-                        rate *= C[i] * C[i]  # // second order kinetics
+                        rate *= C[i]  # first order kinetics
+                    elif m == -2:
+                        rate *= C[i] * C[i]  # second order kinetics
                 dCdt[k] += rate
     return dCdt
+
+
+def print_species_header(model):
+    """
+    Provide header string for printing.
+    """
+    _str = "#"
+    for i in range(model.nspecies):
+        key = [key for key, value in model.symbol.items() if value == i][0]
+        _str += " [{}]".format(key)
+    print(_str)
 
 
 def C(t, C0, model, source=None):
@@ -133,7 +157,9 @@ def C(t, C0, model, source=None):
     C0     : array with starting condition for each species concentation [mol / l]
     source : beam source
     """
+    # t_span = (min(t), max(t))
     sol = odeint(dCdt, C0, t, args=(model, source))
+    # sol = solve_ivp(dCdt, t_span, y0=C0, args=(model, source), dense_output=True)
     return sol
 
 
@@ -162,29 +188,30 @@ def main(args=sys.argv[1:]):
     """ Main function
     """
 
-    dose = 2.0          # Gy
-    t0 = -1.0           # sec
-    duration = 2.0      # sec
-    pulsewidth = 0.010  # sec
-    freq = 13.0         # Hz
+    # simulation parameters
+    dose = 2.0          # [Gy]
+    pulsewidth = 0.01   # [sec]
+    freq = 13.0         # [Hz]
+
+    # simulation interval
+    t_start = -1.0      # simulation start time, beam will only be on at t >= 0 [sec]
+    t_stop = 2.0        # stop at this time. Beam only be on at t >= 0 [sec]
     steps = 1001
 
-    s = Source(dose, duration, pulsewidth, freq)
+    model = RadChemModel
+
+    # s = Source(dose, t_stop, pulsewidth, "DC")
+    s = Source(dose, t_stop, pulsewidth, freq)
     print(s)
 
-    # t = 0
-    # while t < duration:
-    #     print(t, s.beam(t))
-    #     t += step
-
-    symb = RadChemModel.symbol
-
-    t = np.linspace(t0, duration, steps)
-
+    t = np.linspace(t_start, t_stop, steps)
     result = C(t, C0, RadChemModel, s)
 
-    # select results to be printed
+    # sol = solve_ivp(dCdt, (t_start, t_stop), y0=C0, args=(RadChemModel, s), dense_output=True)
+    # result = sol.sol(t)
 
+    # print data for certain species:
+    symb = model.symbol
     a = result[:, symb["H+"]]
     b = result[:, symb["OH-"]]
     c = result[:, symb["e-"]]
@@ -192,7 +219,13 @@ def main(args=sys.argv[1:]):
 
     for i, tt in enumerate(t):
         # print(tt, s.beam(tt), a[i], b[i], c[i], d[i])
-        print(tt, s.beam(tt), a[i], b[i])
+        _str = "{:.3f}".format(tt)
+        _str += " {:.3f}".format(s.beam(tt))
+        _str += " {:.3e}".format(a[i])
+        _str += " {:.3e}".format(b[i])
+        _str += " {:.3e}".format(c[i])
+        _str += " {:.3e}".format(d[i])
+        print(_str)
 
 
 if __name__ == '__main__':
