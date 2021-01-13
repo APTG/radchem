@@ -22,7 +22,7 @@ class Source():
     def __init__(self, dose=2.0, duration=10.0, plength=1e-6, pfreq=1e5):
         """
         dose : total dose to be delivered [Gy]
-        duration : time interval where the dose will be delivered [s]
+        duration : time interval where the dose will be delivered, always starting from t = 0 [s]
         plength : micropulse length [s]
         pfreq : micropulse frequency [Hz], set to "DC" for DC beam.
         """
@@ -82,16 +82,17 @@ class Source():
         """
         if t < 0.0:
             return 0.0
-        if t > 1.0:
-            return 0.0
 
+        if self.pfreq == "DC":
+            return self.doserate
+
+        # build a pulse
         npulse = int(t / self.cyclelength)  # current pulse number
         phase = (t - (npulse * self.cyclelength)) / self.cyclelength
         if phase < self.duty:
-            beam = self.pdoserate
+            return self.pdoserate
         else:
-            beam = 0.0
-        return beam
+            return 0.0
 
 
 # def dCdt(t, C, model, source=None):    # solve_ivp needs (t,C,...)
