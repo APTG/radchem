@@ -8,7 +8,7 @@ from typing import Optional, List, Sequence
 
 import matplotlib.pylab as plt  # type: ignore
 import numpy as np  # type: ignore
-from scipy.integrate import odeint  # type: ignore
+from scipy.integrate import solve_ivp  # type: ignore
 
 from model import RadChemModel
 
@@ -142,12 +142,20 @@ def dCdt(C: Sequence[float], t: float, model: RadChemModel, source: Optional[Sou
     return dCdt_vec
 
 
+def dCdt2(t: float, C: Sequence[float], model: RadChemModel, source: Optional[Source] = None) -> Sequence[float]:
+    return dCdt(C, t, model, source)
+
+
 def dCdt_Jac(C: Sequence[float], t: float, model: RadChemModel, source: Optional[Source] = None) -> Sequence[float]:
     dCdt_jac_res = model.dCdt_Jac_f(C, t, model, source)
     return dCdt_jac_res
 
 
-def C(t: float, C0: Sequence[float], model: RadChemModel, source: Optional[Source] = None) -> List[float]:
+def dCdt_Jac2(t: float, C: Sequence[float], model: RadChemModel, source: Optional[Source] = None) -> Sequence[float]:
+    return dCdt_Jac(C, t, model, source)
+
+
+def C(t: Sequence[float], C0: Sequence[float], model: RadChemModel, source: Optional[Source] = None) -> List[float]:
     """
     t      : array with time steps to calculate [sec]
     C_i(t) : array of concentrations of species i at time t [mol / l]
@@ -155,18 +163,34 @@ def C(t: float, C0: Sequence[float], model: RadChemModel, source: Optional[Sourc
     source : beam source
     """
 
-    if source:
-        edges = source.beam_edges()
-        dense_grid = np.arange(start=0, stop=source.duration, step=1e-5)  # 1 ms grid
-        crit_point = np.sort(np.hstack([dense_grid, edges]))
-        crit_point = np.logspace(start=1e-11, stop=source.duration, num=1000)
-    else:
-        crit_point = None
+    # if source:
+    #     edges = source.beam_edges()
+    #     dense_grid = np.arange(start=0, stop=source.duration, step=1e-5)  # 1 ms grid
+    #     crit_point = np.sort(np.hstack([dense_grid, edges]))
+    #     crit_point = np.logspace(start=1e-11, stop=source.duration, num=1000)
+    # else:
+    #     crit_point = None
     # sol, info_dict = odeint(dCdt, C0, t, args=(model, source),
     # Dfun=model.dCdt_Jac_f, full_output=True, tcrit=crit_point)
-    sol, info_dict = odeint(dCdt, C0, t, args=(model, source), full_output=True, tcrit=crit_point)
-    print(info_dict)
-    return sol
+    # sol, info_dict = odeint(dCdt, C0, t, args=(model, source), full_output=True, tcrit=crit_point)
+
+    # new API:
+    max_step = 1e-3
+    if source:
+        max_step = source.plength / 10.0  # TODO: investigate other step limits
+
+    sol = solve_ivp(fun=dCdt2,
+                    t_span=(min(t), max(t)),
+                    y0=C0,
+                    method='BDF',
+                    t_eval=t,
+                    args=(model, source),
+                    jac=dCdt_Jac2,  # TODO: investigate disabling it
+                    rtol=1e-6,  # TODO: investigate default tolerance
+                    max_step=max_step,
+                    #                   vectorized=True,  # TODO investigate parallel version
+                    )
+    return sol.y
 
 
 # some start conditions
@@ -228,7 +252,7 @@ def run():
 
     # save simulation output for later processing (i.e. plotting)
     np.savetxt(fname=sim_output_filename,
-               X=np.column_stack([t, beam_profile, result]),
+               X=np.column_stack([t, beam_profile, result.T]),
                header="t beam " + " ".join([str(s) for s in RadChemModel.species_symbols]))
     print("Saved simulation output into {}".format(sim_output_filename))
     end = time.time()
