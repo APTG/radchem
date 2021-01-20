@@ -1,11 +1,16 @@
-import sys
 import logging
+import os
+import sys
+from logging.handlers import RotatingFileHandler
+from typing import Optional, List
 
+import matplotlib.pylab as plt
 import numpy as np
 from scipy.integrate import odeint
-# from scipy.integrate import solve_ivp
 
 from model import RadChemModel
+
+log_formatter = logging.Formatter('%(asctime)s %(levelname)s %(funcName)s(%(lineno)d) %(message)s')
 
 logger = logging.getLogger(__name__)
 
@@ -13,8 +18,19 @@ logger = logging.getLogger(__name__)
 NA = 6.02214129e23      # Avogadro constant
 EVJ = 6.24150934e18     # eV per joule
 
+logger.setLevel(logging.DEBUG)
 
-class Source():
+# add a rotating handler
+try:
+    os.remove("test.log")
+except FileNotFoundError as e:
+    pass
+handler = RotatingFileHandler("test.log", mode='w', maxBytes=1024*1000, backupCount=1)
+handler.setFormatter(log_formatter)
+logger.addHandler(handler)
+
+
+class Source:
     """
     Class for defining a beam source.
     """
@@ -54,7 +70,7 @@ class Source():
             self.pdoserate = dose / self.beamon      # peak micropulse rate
             self.cyclelength = 1 / self.pfreq
 
-    def __str__(self):
+    def __str__(self) -> str:
         _str = ("# Dose                   : {:.3f} Gy\n".format(self.dose))
         _str += ("# Dose duration          : {:.3f} sec\n".format(self.duration))
         if self.pfreq == "DC":
@@ -74,7 +90,7 @@ class Source():
         _str += ("# Actual beam OFF time   : {:.3f} sec\n".format(self.beamoff))
         return _str
 
-    def beam(self, t):
+    def beam(self, t: float) -> float:
         """
         Calculate dose rate at time t, taking the given pulse structure into account.
 
@@ -95,8 +111,7 @@ class Source():
             return 0.0
 
 
-# def dCdt(t, C, model, source=None):    # solve_ivp needs (t,C,...)
-def dCdt(C, t, model, source=None):
+def dCdt(C: List[float], t: float, model: RadChemModel, source: Optional[Source] = None) -> List[float]:
     """
     Differential equation describing the change in concentration as a function of time.
 
@@ -108,39 +123,22 @@ def dCdt(C, t, model, source=None):
     Returns:
     dCi(t)/dt : change in concentration of all species i at time t. [mol/liter/sec]
     """
-    dCdt = np.zeros(model.nspecies)
+    print("t = {}".format(t))
+    logger.info("t = {}".format(t))
+
+    dCdt_vec = model.dCdt_f(C, t)
     # check first if any new ions are created due to irradiation
     if source:
         dDdt = source.beam(t)
         # print("# t, dDdt:", t, dDdt)
         if dDdt > 0.0:
-            for k in range(model.nspecies):
-                dCdt[k] = dDdt * model.gval[k] * 0.01 * EVJ / NA  # omitted times rho, assuming 1 kg = 1 liter
+            for k in range(len(dCdt_vec)):
+                dCdt_vec[k] = dDdt * model.gval[k] * 0.01 * EVJ / NA  # omitted times rho, assuming 1 kg = 1 liter
 
-    # build rate constants for all species:
-    for k in range(model.nspecies):
-        # loop over each possible equation
-        for j in range(model.neq):
-            # in case the current species is involved:
-            m = model.nmatrix[j][k]
-            if m != 0:
-                rate = m * model.rconst[j]
-                # we still need to multiply with the concentrations of the constituents.
-                # eq 1) AB -> A + B
-                # eq 2) A + B -> AB
-                # dC_AB / dt =  - 1 * rate_1 * C_AB
-                #               + 1 * rate_2 * C_A * C_B
-                for i in range(model.nspecies):
-                    m = model.nmatrix[j][i]
-                    if m == -1:
-                        rate *= C[i]  # first order kinetics
-                    elif m == -2:
-                        rate *= C[i] * C[i]  # second order kinetics
-                dCdt[k] += rate
-    return dCdt
+    return dCdt_vec
 
 
-def print_species_header(model):
+def print_species_header(model: RadChemModel) -> None:
     """
     Provide header string for printing.
     """
@@ -151,16 +149,20 @@ def print_species_header(model):
     print(_str)
 
 
-def C(t, C0, model, source=None):
+def dCdt_Jac(C: List[float], t: float, model: RadChemModel, source: Optional[Source] = None) -> List[float]:
+    dCdt_jac_res = model.dCdt_Jac_f(C, t)
+    return dCdt_jac_res
+
+
+def C(t: float, C0: List[float], model: RadChemModel, source: Optional[Source] = None) -> List[float]:
     """
     t      : array with time steps to calculate [sec]
     C_i(t) : array of concentrations of species i at time t [mol / l]
-    C0     : array with starting condition for each species concentation [mol / l]
+    C0     : array with starting condition for each species concentration [mol / l]
     source : beam source
     """
-    # t_span = (min(t), max(t))
-    sol = odeint(dCdt, C0, t, args=(model, source))
-    # sol = solve_ivp(dCdt, t_span, y0=C0, args=(model, source), dense_output=True)
+    sol, info_dict = odeint(dCdt, C0, t, args=(model, source), full_output=True, tcrit=np.linspace(1e-5, 2, 1000))
+    print(info_dict)
     return sol
 
 
@@ -190,14 +192,14 @@ def main(args=sys.argv[1:]):
     """
 
     # simulation parameters
-    dose = 2.0          # [Gy]
+    dose = 2000000.0          # [Gy]
     pulsewidth = 0.01   # [sec]
-    freq = 13.0         # [Hz]
+    freq = 10.0         # [Hz]
 
     # simulation interval
     t_start = -1.0      # simulation start time, beam will only be on at t >= 0 [sec]
     t_stop = 2.0        # stop at this time. Beam only be on at t >= 0 [sec]
-    steps = 1001
+    steps = 30000
 
     model = RadChemModel
 
@@ -206,27 +208,63 @@ def main(args=sys.argv[1:]):
     print(s)
 
     t = np.linspace(t_start, t_stop, steps)
+    #duration_sec = 1e0
+    #t = np.linspace(t_start, t_start + duration_sec, 10)
+
+    logger.info("Initial concentration")
+    for i, c0_item in enumerate(C0):
+        if C0[i] > 0:
+            logger.info("\tC[{} ({})] = {}".format(i, model.species_symbols[i], C0[i]))
+
     result = C(t, C0, RadChemModel, s)
 
-    # sol = solve_ivp(dCdt, (t_start, t_stop), y0=C0, args=(RadChemModel, s), dense_output=True)
-    # result = sol.sol(t)
+    # # count number of species for which there was some non-zero solution
+    # non_zero_mask = np.invert(np.all(result == 0, axis=0))
+    # indices_of_non_zero = np.arange(start=0, stop=len(model.species_symbols))[non_zero_mask]
 
-    # print data for certain species:
-    symb = model.symbol
-    a = result[:, symb["H+"]]
-    b = result[:, symb["OH-"]]
-    c = result[:, symb["e-"]]
-    d = result[:, symb["OH"]]
+    fig, ax = plt.subplots(figsize=(16, 12))
+    for i in range(len(model.species_symbols)):
+        ydata = result[:, i]
+        if ydata.max() > 1e-10:
+            ax.plot(t, ydata, '.', label=model.species_symbols[i])
+    ax.set_yscale('log')
+    # ax.set_xscale('log')
+    ax.grid()
+    ax.legend(loc=0)
+    fig.show()
+    # print("The Jacobian was evaluated %d times." % info['nje'][-1])
 
-    for i, tt in enumerate(t):
-        # print(tt, s.beam(tt), a[i], b[i], c[i], d[i])
-        _str = "{:.3f}".format(tt)
-        _str += " {:.3f}".format(s.beam(tt))
-        _str += " {:.3e}".format(a[i])
-        _str += " {:.3e}".format(b[i])
-        _str += " {:.3e}".format(c[i])
-        _str += " {:.3e}".format(d[i])
-        print(_str)
+    # fig, axes = plt.subplots(non_zero_mask.sum()//2, 2, figsize=(10,10), sharex=True)
+    # for ax, nonzero_index in zip(axes.flatten(), indices_of_non_zero):
+    #     nonzero_name = model.species_symbols[nonzero_index].name
+    #     ydata = result[:, nonzero_index]
+    #     ax.plot(t - t_start, ydata, marker='.', linestyle='', label=nonzero_name)
+    #     ax.legend(loc=0)
+    #     ax.set_yscale('symlog')
+    #     print("{} ({}) : min {:2.2e} max {:2.2e}".format(nonzero_index, nonzero_name, ydata.min(), ydata.max()))
+    # fig.show()
+
+    # for s in model.symbol.keys():
+    #     ydata = result[:, model.symbol[s]]
+    #     ax.plot(t-t_start, result[:, model.symbol[s]], marker='.', linestyle='', label=s)
+    #     if np.any(ydata):
+    #         print("{} : min {:2.2e} max {:2.2e}".format(s, ydata.min(), ydata.max()))
+    # fig.show()
+    # plt.yscale('log')
+    # plt.xlabel("Time from start [s]")
+    # plt.ylim(1e-10,None)
+    # plt.legend(loc=0)
+    # plt.show()
+    #
+    # for i, tt in enumerate(t):
+    #     # print(tt, s.beam(tt), a[i], b[i], c[i], d[i])
+    #     _str = "{:.3f}".format(tt)
+    #     _str += " {:.3f}".format(s.beam(tt))
+    #     _str += " {:.3e}".format(a[i])
+    #     _str += " {:.3e}".format(b[i])
+    #     _str += " {:.3e}".format(c[i])
+    #     _str += " {:.3e}".format(d[i])
+    #     print(_str)
 
 
 if __name__ == '__main__':
