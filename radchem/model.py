@@ -123,6 +123,9 @@ class RadChemModel:
         0  # /* A13 : O3-  */
     )
 
+    # TODO check if equations are correct, according to:
+    #  https://nvlpubs.nist.gov/nistpubs/jres/107/2/j72kla.pdf
+
     reactions: List[Tuple[Any, Dict[Any, int], Dict[Any, int], str]] = [
         # (coeff, r_stoich, net_stoich, equation)
         # # /* v1-v5*/

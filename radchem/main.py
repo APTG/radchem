@@ -143,7 +143,7 @@ def dCdt(C: Sequence[float], t: float, model: RadChemModel, source: Optional[Sou
 
 
 def dCdt_Jac(C: Sequence[float], t: float, model: RadChemModel, source: Optional[Source] = None) -> Sequence[float]:
-    dCdt_jac_res = model.dCdt_Jac_f(C, t)
+    dCdt_jac_res = model.dCdt_Jac_f(C, t, model, source)
     return dCdt_jac_res
 
 
@@ -155,11 +155,15 @@ def C(t: float, C0: Sequence[float], model: RadChemModel, source: Optional[Sourc
     source : beam source
     """
 
-    edges = source.beam_edges()
-    dense_grid = np.arange(start=0, stop=source.duration, step=1e-5)  # 1 ms grid
-    crit_point = np.sort(np.hstack([dense_grid, edges]))
-    crit_point = np.logspace(start=1e-11, stop=source.duration, num=1000)
-    # sol, info_dict = odeint(dCdt, C0, t, args=(model, source), Dfun=model.dCdt_Jac_f, full_output=True, tcrit=crit_point)
+    if source:
+        edges = source.beam_edges()
+        dense_grid = np.arange(start=0, stop=source.duration, step=1e-5)  # 1 ms grid
+        crit_point = np.sort(np.hstack([dense_grid, edges]))
+        crit_point = np.logspace(start=1e-11, stop=source.duration, num=1000)
+    else:
+        crit_point = None
+    # sol, info_dict = odeint(dCdt, C0, t, args=(model, source),
+    # Dfun=model.dCdt_Jac_f, full_output=True, tcrit=crit_point)
     sol, info_dict = odeint(dCdt, C0, t, args=(model, source), full_output=True, tcrit=crit_point)
     print(info_dict)
     return sol
