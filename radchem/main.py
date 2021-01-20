@@ -89,8 +89,10 @@ class Source:
         _str += ("# Actual beam OFF time   : {:.3f} sec\n".format(self.beamoff))
         return _str
 
-    # def beam_edges(self) -> Sequence[float]:
-    #     pass
+    def beam_edges(self) -> Sequence[float]:
+        leading_edges = np.arange(start=0.0, stop=self.duration, step=self.cyclelength)
+        trailing_edges = np.arange(start=self.plength, stop=self.duration, step=self.cyclelength)
+        return np.column_stack([leading_edges, trailing_edges]).flatten()
 
     def beam(self, t: float) -> float:
         """
@@ -126,6 +128,7 @@ def dCdt(C: Sequence[float], t: float, model: RadChemModel, source: Optional[Sou
     dCi(t)/dt : change in concentration of all species i at time t. [mol/liter/sec]
     """
     logger.info("t = {}".format(t))
+    print("t = {}".format(t))
 
     dCdt_vec = model.dCdt_f(C, t)
     # check first if any new ions are created due to irradiation
@@ -151,7 +154,13 @@ def C(t: float, C0: Sequence[float], model: RadChemModel, source: Optional[Sourc
     C0     : array with starting condition for each species concentration [mol / l]
     source : beam source
     """
-    sol, info_dict = odeint(dCdt, C0, t, args=(model, source), full_output=True, tcrit=np.linspace(1e-5, 2, 1000))
+
+    edges = source.beam_edges()
+    dense_grid = np.arange(start=0, stop=source.duration, step=1e-5)  # 1 ms grid
+    crit_point = np.sort(np.hstack([dense_grid, edges]))
+    crit_point = np.logspace(start=1e-11, stop=source.duration, num=1000)
+    # sol, info_dict = odeint(dCdt, C0, t, args=(model, source), Dfun=model.dCdt_Jac_f, full_output=True, tcrit=crit_point)
+    sol, info_dict = odeint(dCdt, C0, t, args=(model, source), full_output=True, tcrit=crit_point)
     print(info_dict)
     return sol
 
@@ -183,8 +192,8 @@ def run():
     start = time.time()
 
     # simulation parameters
-    dose = 2000000.0  # [Gy]
-    pulsewidth = 0.01  # [sec]
+    dose = 20000.0  # [Gy]
+    pulsewidth = 0.05  # [sec]
     freq = 10.0  # [Hz]
 
     # simulation interval
@@ -208,10 +217,15 @@ def run():
     # run simulation
     result = C(t, C0, RadChemModel, s)
 
+    # simulate beam profile
+    beam_profile = np.zeros_like(t)
+    for i, beam_time in enumerate(t):
+        beam_profile[i] = s.beam(beam_time)
+
     # save simulation output for later processing (i.e. plotting)
     np.savetxt(fname=sim_output_filename,
-               X=np.column_stack([t, result]),
-               header="t " + " ".join([str(s) for s in RadChemModel.species_symbols]))
+               X=np.column_stack([t, beam_profile, result]),
+               header="t beam " + " ".join([str(s) for s in RadChemModel.species_symbols]))
     print("Saved simulation output into {}".format(sim_output_filename))
     end = time.time()
     print("Simulating took {:3.3f} sec".format(end - start))
@@ -221,23 +235,23 @@ def run():
 def plot():
     start = time.time()
     data = np.genfromtxt(sim_output_filename, delimiter=' ', names=True, dtype=None)
-    fig, ax = plt.subplots(figsize=(16, 12))
+    fig, ax = plt.subplots(figsize=(12, 10))
     for i in range(1, len(data.dtype)):
         ydata = data[data.dtype.names[i]]
         if ydata.max() > 1e-10:
-            ax.plot(data['t'], ydata, '.', label=data.dtype.names[i])
+            ax.plot(data['t'], ydata, '.', label=data.dtype.names[i], markersize=1)
     ax.set_yscale('log')
     ax.set_xlabel("Time [s]")
     ax.set_ylabel("Concentration [mol/liter]")
     ax.grid()
     ax.legend(loc=0)
-    fig.savefig("plot.pdf")
+    # fig.savefig("plot.pdf")
     fig.savefig("plot.png")
     ax.set_ylim(1e-20, 1e2)
-    fig.savefig("plot_zoom1.pdf")
+    # fig.savefig("plot_zoom1.pdf")
     fig.savefig("plot_zoom1.png")
     ax.set_ylim(1e-10, 1e0)
-    fig.savefig("plot_zoom2.pdf")
+    # fig.savefig("plot_zoom2.pdf")
     fig.savefig("plot_zoom2.png")
 
     end = time.time()

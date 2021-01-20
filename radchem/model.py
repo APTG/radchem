@@ -304,7 +304,7 @@ class RadChemModel:
         return dCdt_jac_lambda
 
     @classmethod
-    def dCdt_Jac_f(cls, concentr: Sequence[float], t: float) -> List[float]:
+    def dCdt_Jac_f(cls, concentr: Sequence[float], t: float, model: Any, source: Any) -> List[float]:
         """
         Calculate function for Jacobian
         """
