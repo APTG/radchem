@@ -1,8 +1,8 @@
 from functools import reduce, lru_cache
 from operator import mul
-from typing import Callable, List
+from typing import Callable, Dict, List, Tuple, Any, Sequence
 
-import sympy as sym
+import sympy as sym  # type: ignore
 
 
 def prod(seq):
@@ -123,7 +123,7 @@ class RadChemModel:
         0  # /* A13 : O3-  */
     )
 
-    reactions = [
+    reactions: List[Tuple[Any, Dict[Any, int], Dict[Any, int], str]] = [
         # (coeff, r_stoich, net_stoich, equation)
         # # /* v1-v5*/
         # # /*0           4     5           9    10        14*/
@@ -267,6 +267,7 @@ class RadChemModel:
         dCdt = {C_symb: 0 for C_symb in cls.species_symbols}
 
         # loop over all reactions
+        r_stoich: Dict
         for coeff, r_stoich, net_stoich, _ in cls.reactions:
 
             # calculate reaction rate, based on LHS of reaction equation
@@ -284,11 +285,11 @@ class RadChemModel:
 
     @classmethod
     @lru_cache
-    def dCdt_f_lambda(cls) -> Callable[[list, float], list]:
+    def dCdt_f_lambda(cls) -> Callable[[Sequence[float], float, Sequence[float]], List[float]]:
         return sym.lambdify((cls.species_symbols, cls.t) + (cls.rconst_symbols,), cls.dCdt_exp())
 
     @classmethod
-    def dCdt_f(cls, concentr, t) -> Callable[[list, float], list]:
+    def dCdt_f(cls, concentr: Sequence[float], t: float) -> List[float]:
         """
         Calculate function for dCdt
         """
@@ -297,13 +298,13 @@ class RadChemModel:
 
     @classmethod
     @lru_cache
-    def dCdt_Jac_f_lambda(cls) -> Callable[[list, float, list], list]:
+    def dCdt_Jac_f_lambda(cls) -> Callable[[Sequence[float], float, Sequence[float]], List[float]]:
         J = sym.Matrix(cls.dCdt_exp()).jacobian(cls.species_symbols)
         dCdt_jac_lambda = sym.lambdify((cls.species_symbols, cls.t) + (cls.rconst_symbols,), J)
         return dCdt_jac_lambda
 
     @classmethod
-    def dCdt_Jac_f(cls, concentr, t) -> Callable[[list, float, list], list]:
+    def dCdt_Jac_f(cls, concentr: Sequence[float], t: float) -> List[float]:
         """
         Calculate function for Jacobian
         """

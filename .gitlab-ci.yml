@@ -26,9 +26,10 @@ before_script:
 
 test:
   script:
-    - pip install flake8
+    - pip install flake8 mypy
     - cd radchem
-    - flake8 *.py
+    - flake8 *.py  # check if code follows PEP8 guidelines
+    - mypy *.py  # check if types are defined correctly
 
 run:
   script:

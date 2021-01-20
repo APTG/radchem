@@ -1,32 +1,29 @@
+import argparse
 import logging
 import os
 import sys
 from logging.handlers import RotatingFileHandler
-from typing import Optional, List
+from typing import Optional, List, Sequence
 
-import matplotlib.pylab as plt
-import numpy as np
-from scipy.integrate import odeint
+import numpy as np  # type: ignore
+from scipy.integrate import odeint  # type: ignore
 
 from model import RadChemModel
 
-log_formatter = logging.Formatter('%(asctime)s %(levelname)s %(funcName)s(%(lineno)d) %(message)s')
-
-logger = logging.getLogger(__name__)
-
-
-NA = 6.02214129e23      # Avogadro constant
-EVJ = 6.24150934e18     # eV per joule
-
-logger.setLevel(logging.DEBUG)
+NA = 6.02214129e23  # Avogadro constant
+EVJ = 6.24150934e18  # eV per joule
 
 # add a rotating handler
+log_formatter = logging.Formatter('%(asctime)s %(levelname)s %(funcName)s(%(lineno)d) %(message)s')
+handler = RotatingFileHandler("test.log", mode='w', maxBytes=1024 * 1000, backupCount=1)
+handler.setFormatter(log_formatter)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 try:
     os.remove("test.log")
-except FileNotFoundError as e:
+except FileNotFoundError:
     pass
-handler = RotatingFileHandler("test.log", mode='w', maxBytes=1024*1000, backupCount=1)
-handler.setFormatter(log_formatter)
 logger.addHandler(handler)
 
 
@@ -65,9 +62,9 @@ class Source:
             self.plength = plength
             self.pulsecount = int(duration * pfreq)  # total number of pulses given
             self.beamon = self.pulsecount * plength  # total time beam is ON
-            self.beamoff = duration - self.beamon    # total time beam is OFF
-            self.duty = self.beamon / duration       # duty cycle, 1.0 = DC beam
-            self.pdoserate = dose / self.beamon      # peak micropulse rate
+            self.beamoff = duration - self.beamon  # total time beam is OFF
+            self.duty = self.beamon / duration  # duty cycle, 1.0 = DC beam
+            self.pdoserate = dose / self.beamon  # peak micropulse rate
             self.cyclelength = 1 / self.pfreq
 
     def __str__(self) -> str:
@@ -111,7 +108,7 @@ class Source:
             return 0.0
 
 
-def dCdt(C: List[float], t: float, model: RadChemModel, source: Optional[Source] = None) -> List[float]:
+def dCdt(C: Sequence[float], t: float, model: RadChemModel, source: Optional[Source] = None) -> Sequence[float]:
     """
     Differential equation describing the change in concentration as a function of time.
 
@@ -123,7 +120,6 @@ def dCdt(C: List[float], t: float, model: RadChemModel, source: Optional[Source]
     Returns:
     dCi(t)/dt : change in concentration of all species i at time t. [mol/liter/sec]
     """
-    print("t = {}".format(t))
     logger.info("t = {}".format(t))
 
     dCdt_vec = model.dCdt_f(C, t)
@@ -138,23 +134,12 @@ def dCdt(C: List[float], t: float, model: RadChemModel, source: Optional[Source]
     return dCdt_vec
 
 
-def print_species_header(model: RadChemModel) -> None:
-    """
-    Provide header string for printing.
-    """
-    _str = "#"
-    for i in range(model.nspecies):
-        key = [key for key, value in model.symbol.items() if value == i][0]
-        _str += " [{}]".format(key)
-    print(_str)
-
-
-def dCdt_Jac(C: List[float], t: float, model: RadChemModel, source: Optional[Source] = None) -> List[float]:
+def dCdt_Jac(C: Sequence[float], t: float, model: RadChemModel, source: Optional[Source] = None) -> Sequence[float]:
     dCdt_jac_res = model.dCdt_Jac_f(C, t)
     return dCdt_jac_res
 
 
-def C(t: float, C0: List[float], model: RadChemModel, source: Optional[Source] = None) -> List[float]:
+def C(t: float, C0: Sequence[float], model: RadChemModel, source: Optional[Source] = None) -> List[float]:
     """
     t      : array with time steps to calculate [sec]
     C_i(t) : array of concentrations of species i at time t [mol / l]
@@ -168,22 +153,22 @@ def C(t: float, C0: List[float], model: RadChemModel, source: Optional[Source] =
 
 # some start conditions
 C0 = [  # ystart[NSPECIES] = [
-    0,      # /* A0  : e-   */
-    0,      # /* A1  : H    */
-    0,      # /* A2  : OH   */
-    0,      # /* A3  : H2O2 */
-    4e-5,   # /* A4  : O2   */
+    0,  # /* A0  : e-   */
+    0,  # /* A1  : H    */
+    0,  # /* A2  : OH   */
+    0,  # /* A3  : H2O2 */
+    4e-5,  # /* A4  : O2   */
 
-    0,      # /* A5  : O2-  */
-    0,      # /* A6  : HO2  */
-    0,      # /* A7  : H2   */
+    0,  # /* A5  : O2-  */
+    0,  # /* A6  : HO2  */
+    0,  # /* A7  : H2   */
     55.56,  # /* A8  : H2O  */
-    0,      # /* A9  : OH-  */
+    0,  # /* A9  : OH-  */
 
-    0,      # /* A10 : HO2- */
-    0,      # /* A11 : H+   */
-    0,      # /* A12 : O-   */
-    0       # /* A13 : O3-  */
+    0,  # /* A10 : HO2- */
+    0,  # /* A11 : H+   */
+    0,  # /* A12 : O-   */
+    0  # /* A13 : O3-  */
 ]
 
 
@@ -191,15 +176,24 @@ def main(args=sys.argv[1:]):
     """ Main function
     """
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-v', '--verbosity', action='count', help="increase output verbosity", default=0)
+    args = parser.parse_args(args)
+
+    if args.verbosity == 1:
+        logger.setLevel(logging.INFO)
+    elif args.verbosity > 1:
+        logger.setLevel(logging.DEBUG)
+
     # simulation parameters
-    dose = 2000000.0          # [Gy]
-    pulsewidth = 0.01   # [sec]
-    freq = 10.0         # [Hz]
+    dose = 2000000.0  # [Gy]
+    pulsewidth = 0.01  # [sec]
+    freq = 10.0  # [Hz]
 
     # simulation interval
-    t_start = -1.0      # simulation start time, beam will only be on at t >= 0 [sec]
-    t_stop = 2.0        # stop at this time. Beam only be on at t >= 0 [sec]
-    steps = 30000
+    t_start = -1.0  # simulation start time, beam will only be on at t >= 0 [sec]
+    t_stop = 2.0  # stop at this time. Beam only be on at t >= 0 [sec]
+    steps = 3000
 
     model = RadChemModel
 
@@ -208,8 +202,6 @@ def main(args=sys.argv[1:]):
     print(s)
 
     t = np.linspace(t_start, t_stop, steps)
-    #duration_sec = 1e0
-    #t = np.linspace(t_start, t_start + duration_sec, 10)
 
     logger.info("Initial concentration")
     for i, c0_item in enumerate(C0):
@@ -217,56 +209,10 @@ def main(args=sys.argv[1:]):
             logger.info("\tC[{} ({})] = {}".format(i, model.species_symbols[i], C0[i]))
 
     result = C(t, C0, RadChemModel, s)
-
-    # # count number of species for which there was some non-zero solution
-    # non_zero_mask = np.invert(np.all(result == 0, axis=0))
-    # indices_of_non_zero = np.arange(start=0, stop=len(model.species_symbols))[non_zero_mask]
-
-    fig, ax = plt.subplots(figsize=(16, 12))
-    for i in range(len(model.species_symbols)):
-        ydata = result[:, i]
-        if ydata.max() > 1e-10:
-            ax.plot(t, ydata, '.', label=model.species_symbols[i])
-    ax.set_yscale('log')
-    # ax.set_xscale('log')
-    ax.grid()
-    ax.legend(loc=0)
-    fig.show()
+    print(result.shape)
+    np.savetxt("result.txt", result)
 
     return 1
-    # print("The Jacobian was evaluated %d times." % info['nje'][-1])
-
-    # fig, axes = plt.subplots(non_zero_mask.sum()//2, 2, figsize=(10,10), sharex=True)
-    # for ax, nonzero_index in zip(axes.flatten(), indices_of_non_zero):
-    #     nonzero_name = model.species_symbols[nonzero_index].name
-    #     ydata = result[:, nonzero_index]
-    #     ax.plot(t - t_start, ydata, marker='.', linestyle='', label=nonzero_name)
-    #     ax.legend(loc=0)
-    #     ax.set_yscale('symlog')
-    #     print("{} ({}) : min {:2.2e} max {:2.2e}".format(nonzero_index, nonzero_name, ydata.min(), ydata.max()))
-    # fig.show()
-
-    # for s in model.symbol.keys():
-    #     ydata = result[:, model.symbol[s]]
-    #     ax.plot(t-t_start, result[:, model.symbol[s]], marker='.', linestyle='', label=s)
-    #     if np.any(ydata):
-    #         print("{} : min {:2.2e} max {:2.2e}".format(s, ydata.min(), ydata.max()))
-    # fig.show()
-    # plt.yscale('log')
-    # plt.xlabel("Time from start [s]")
-    # plt.ylim(1e-10,None)
-    # plt.legend(loc=0)
-    # plt.show()
-    #
-    # for i, tt in enumerate(t):
-    #     # print(tt, s.beam(tt), a[i], b[i], c[i], d[i])
-    #     _str = "{:.3f}".format(tt)
-    #     _str += " {:.3f}".format(s.beam(tt))
-    #     _str += " {:.3e}".format(a[i])
-    #     _str += " {:.3e}".format(b[i])
-    #     _str += " {:.3e}".format(c[i])
-    #     _str += " {:.3e}".format(d[i])
-    #     print(_str)
 
 
 if __name__ == '__main__':
