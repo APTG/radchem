@@ -6,8 +6,8 @@ import time
 from logging.handlers import RotatingFileHandler
 from typing import Optional, List, Sequence
 
+import matplotlib.pylab as plt  # type: ignore
 import numpy as np  # type: ignore
-import matplotlib.pylab as plt
 from scipy.integrate import odeint  # type: ignore
 
 from model import RadChemModel
@@ -88,6 +88,9 @@ class Source:
         _str += ("# Actual beam ON time    : {:.3f} sec\n".format(self.beamon))
         _str += ("# Actual beam OFF time   : {:.3f} sec\n".format(self.beamoff))
         return _str
+
+    # def beam_edges(self) -> Sequence[float]:
+    #     pass
 
     def beam(self, t: float) -> float:
         """
