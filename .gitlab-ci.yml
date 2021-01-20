@@ -35,4 +35,7 @@ run:
   script:
     - pip install -r requirements.txt
     - cd radchem
-    - python main.py 
+    - python main.py # check no option
+    - python main.py --help # check no option
+    - python run.py --run # check run
+    - python run.py --plot # check plotting

@@ -2,10 +2,12 @@ import argparse
 import logging
 import os
 import sys
+import time
 from logging.handlers import RotatingFileHandler
 from typing import Optional, List, Sequence
 
 import numpy as np  # type: ignore
+import matplotlib.pylab as plt
 from scipy.integrate import odeint  # type: ignore
 
 from model import RadChemModel
@@ -171,19 +173,11 @@ C0 = [  # ystart[NSPECIES] = [
     0  # /* A13 : O3-  */
 ]
 
+sim_output_filename = 'results.csv'
 
-def main(args=sys.argv[1:]):
-    """ Main function
-    """
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-v', '--verbosity', action='count', help="increase output verbosity", default=0)
-    args = parser.parse_args(args)
-
-    if args.verbosity == 1:
-        logger.setLevel(logging.INFO)
-    elif args.verbosity > 1:
-        logger.setLevel(logging.DEBUG)
+def run():
+    start = time.time()
 
     # simulation parameters
     dose = 2000000.0  # [Gy]
@@ -208,11 +202,72 @@ def main(args=sys.argv[1:]):
         if C0[i] > 0:
             logger.info("\tC[{} ({})] = {}".format(i, model.species_symbols[i], C0[i]))
 
+    # run simulation
     result = C(t, C0, RadChemModel, s)
-    print(result.shape)
-    np.savetxt("result.txt", result)
 
-    return 1
+    # save simulation output for later processing (i.e. plotting)
+    np.savetxt(fname=sim_output_filename,
+               X=np.column_stack([t, result]),
+               header="t " + " ".join([str(s) for s in RadChemModel.species_symbols]))
+    print("Saved simulation output into {}".format(sim_output_filename))
+    end = time.time()
+    print("Simulating took {:3.3f} sec".format(end - start))
+    return 0
+
+
+def plot():
+    start = time.time()
+    data = np.genfromtxt(sim_output_filename, delimiter=' ', names=True, dtype=None)
+    fig, ax = plt.subplots(figsize=(16, 12))
+    for i in range(1, len(data.dtype)):
+        ydata = data[data.dtype.names[i]]
+        if ydata.max() > 1e-10:
+            ax.plot(data['t'], ydata, '.', label=data.dtype.names[i])
+    ax.set_yscale('log')
+    ax.set_xlabel("Time [s]")
+    ax.set_ylabel("Concentration [mol/liter]")
+    ax.grid()
+    ax.legend(loc=0)
+    fig.savefig("plot.pdf")
+    fig.savefig("plot.png")
+    ax.set_ylim(1e-20, 1e2)
+    fig.savefig("plot_zoom1.pdf")
+    fig.savefig("plot_zoom1.png")
+    ax.set_ylim(1e-10, 1e0)
+    fig.savefig("plot_zoom2.pdf")
+    fig.savefig("plot_zoom2.png")
+
+    end = time.time()
+    print("Plotting took {:3.3f} sec".format(end - start))
+    return 0
+
+
+def main(args=sys.argv[1:]):
+    """ Main function
+    """
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-v', '--verbosity', action='count', help="increase output verbosity", default=0)
+    parser.add_argument('-r', '--run', help="run simulation and save output", action='store_true')
+    parser.add_argument('-p', '--plot', help="plot results", action='store_true')
+    parsed_args = parser.parse_args(args)
+
+    if parsed_args.verbosity == 1:
+        logger.setLevel(logging.INFO)
+    elif parsed_args.verbosity > 1:
+        logger.setLevel(logging.DEBUG)
+
+    if parsed_args.run:
+        status = run()
+        if status != 0:
+            return status
+
+    if parsed_args.plot:
+        status = plot()
+        if status != 0:
+            return status
+
+    return 0
 
 
 if __name__ == '__main__':
