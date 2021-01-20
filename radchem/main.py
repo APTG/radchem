@@ -232,6 +232,8 @@ def main(args=sys.argv[1:]):
     ax.grid()
     ax.legend(loc=0)
     fig.show()
+
+    return 1
     # print("The Jacobian was evaluated %d times." % info['nje'][-1])
 
     # fig, axes = plt.subplots(non_zero_mask.sum()//2, 2, figsize=(10,10), sharex=True)
