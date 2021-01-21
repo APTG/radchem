@@ -26,12 +26,16 @@ before_script:
 
 test:
   script:
-    - pip install flake8
+    - pip install flake8 mypy
     - cd radchem
-    - flake8 *.py
+    - flake8 *.py  # check if code follows PEP8 guidelines
+    - mypy *.py  # check if types are defined correctly
 
 run:
   script:
     - pip install -r requirements.txt
     - cd radchem
-    - python main.py 
+    - python main.py # check no option
+    - python main.py --help # check no option
+    - python main.py --run # check run
+    - python main.py --plot # check plotting
