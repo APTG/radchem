@@ -125,6 +125,8 @@ class RadChemModel:
 
     # TODO check if equations are correct, according to:
     #  https://nvlpubs.nist.gov/nistpubs/jres/107/2/j72kla.pdf
+    # typo in reaction v16 in 2002 version: OH  + H2O2 -> H2O  + H2O.
+    # correct reaction in version from 1997: OH  + H2O2 -> H2O  + HO2.
 
     reactions: List[Tuple[Any, Dict[Any, int], Dict[Any, int], str]] = [
         # (coeff, r_stoich, net_stoich, equation)
@@ -135,11 +137,11 @@ class RadChemModel:
         # (-1, 0, -1, 0, 0,    0, 0, 0, 0, 1,    0, 0, 0, 0),  # /* e-  + OH   -> OH-        */
         # (-1, 0, 1, -1, 0,    0, 0, 0, 0, 1,    0, 0, 0, 0),  # /* e-  + H2O2 -> OH- + OH   */
         # (-1, 0, 0, 0, -1,    1, 0, 0, 0, 0,    0, 0, 0, 0),  # /* e-  + O2   -> O2-        */
-        (rconst_symbols[0], {em: 2}, {em: -2, H2: 1, OHm: 2}, "e- + e- -> H2 + 2OH-"),
-        (rconst_symbols[1], {em: 1, H: 1}, {em: -1, H: -1, H2: 1, OHm: 1}, "e-  + H    -> H2  + OH-"),
-        (rconst_symbols[2], {em: 1, OH: 1}, {em: -1, OH: -1, OHm: 1}, "e-  + OH   -> OH-"),
-        (rconst_symbols[3], {em: 1, H2O2: 1}, {em: -1, H2O2: -1, OHm: 1, OH: 1}, "e-  + H2O2 -> OH- + OH"),
-        (rconst_symbols[4], {em: 1, O2: 1}, {em: -1, O2: -1, O2m: 1}, "e-  + O2   -> O2-"),
+        (rconst_symbols[0], {em: 2, H2O: 2}, {em: -2, H2O: -2, H2: 1, OHm: 2}, "e- + e- + 2H2O -> H2 + 2OH-"),
+        (rconst_symbols[1], {em: 1, H2O: 1, H: 1}, {em: -1, H2O: -1, H: -1, H2: 1, OHm: 1}, "e- + H2O + H -> H2  + OH-"),
+        (rconst_symbols[2], {em: 1, H2O: 1, OH: 1}, {em: -1, H2O: 0, OH: -1, OHm: 1}, "e- + H2O + OH -> OH- + H2O"),
+        (rconst_symbols[3], {em: 1, H2O: 1, H2O2: 1}, {em: -1, H2O: 0, H2O2: -1, OHm: 1, OH: 1}, "e- + H2O + H2O2 -> OH- + OH + H2O"),
+        (rconst_symbols[4], {em: 1, H2O: 1, O2: 1}, {em: -1, H2O: 0, O2: -1, O2m: 1}, "e- + H2O + O2 -> O2- + H2O"),
 
         # # /* v5-v10*/
         # (-1, 0, 0, 0, 0,   -1, 0, 0, 0, 1,    1, 0, 0, 0),   # /* e-  + O2-  -> HO2- + OH- */
@@ -147,11 +149,11 @@ class RadChemModel:
         # (0, -2, 0, 0, 0,    0, 0, 1, 0, 0,    0, 0, 0, 0),   # /* 2H         -> H2         */
         # (0, -1, -1, 0, 0,    0, 0, 0, 1, 0,    0, 0, 0, 0),  # /* H   + OH   -> H2O        */
         # (0, -1, 1, -1, 0,    0, 0, 0, 1, 0,    0, 0, 0, 0),  # /* H   + H2O2 -> OH   + H2O */
-        (rconst_symbols[5], {em: 1, O2m: 1}, {em: -1, O2m: -1, HO2m: 1, OHm: 1}, "e-  + O2-  -> HO2- + OH-"),
-        (rconst_symbols[6], {em: 1, HO2: 1}, {em: -1, HO2: -1, HO2m: 1}, "e-  + HO2  -> HO2-"),
-        (rconst_symbols[7], {H: 2}, {H: -2, H2: 1}, "2H         -> H2"),
-        (rconst_symbols[8], {H: 1, OH: 1}, {H: -1, OH: -1, H2O: 1}, "H   + OH   -> H2O"),
-        (rconst_symbols[9], {H: 1, H2O2: 1}, {H: -1, H2O2: -1, OH: 1, H2O: 1}, "H   + H2O2 -> OH   + H2O"),
+        (rconst_symbols[5], {em: 1, H2O: 1, O2m: 1}, {em: -1, H2O: -1, O2m: -1, HO2m: 1, OHm: 1}, "e- + H2O + O2-  -> HO2- + OH-"),
+        (rconst_symbols[6], {em: 1, H2O: 1, HO2: 1}, {em: -1, H2O: 0, HO2: -1, HO2m: 1}, "e- + H2O + HO2  -> HO2- + H2O"),
+        (rconst_symbols[7], {H: 2}, {H: -2, H2: 1}, "2H -> H2"),
+        (rconst_symbols[8], {H: 1, OH: 1}, {H: -1, OH: -1, H2O: 1}, "H   + OH  -> H2O"),
+        (rconst_symbols[9], {H: 1, H2O2: 1}, {H: -1, H2O2: -1, OH: 1, H2O: 1}, "H + H2O2 -> OH + H2O"),
 
         # # /* v11-v15*/
         # (0, -1, 0, 0, -1,    0, 1, 0, 0, 0,    0, 0, 0, 0),  # /* H   + O2   -> HO2        */
@@ -175,9 +177,7 @@ class RadChemModel:
         (rconst_symbols[16], {OH: 1, HO2: 1}, {OH: -1, HO2: -1, H2O: 1, O2: 1}, "OH  + HO2  -> H2O  + O2"),
         (rconst_symbols[17], {OH: 1, O2m: 1}, {OH: -1, O2m: -1, OHm: 1, O2: 1}, "OH  + O2-  -> OH-  + O2"),
         (rconst_symbols[18], {HO2: 2}, {HO2: -2, H2O2: 1, O2: 1}, "2HO2       -> H2O2 + O2"),
-        (
-            rconst_symbols[19], {HO2: 1, O2m: 1}, {HO2: -1, O2m: -1, H2O2: 1, O2: 1, OHm: 1},
-            "HO2 + O2-  -> H2O2 + O2 + OH-"),
+        (rconst_symbols[19], {HO2: 1, O2m: 1}, {HO2: -1, O2m: -1, H2O2: 1, O2: 1, OHm: 1}, "HO2 + O2-  -> H2O2 + O2 + OH-"),
 
         # # /* v21-v25*/
         # (0, 0, 0, 0, 0,    0, 0, 0, -1, 1,    0, 1, 0, 0),   # /* H2O         -> H+   + OH-  */
@@ -198,10 +198,10 @@ class RadChemModel:
         # (-1, 1, 0, 0, 0,    0, 0, 0, -1, 1,    0, 0, 0, 0),  # /* e-   + H2O  -> H    + OH-  */
         # (1, -1, 0, 0, 0,    0, 0, 0, 1, -1,    0, 0, 0, 0),  # /* H    + OH-  -> e-   + H2O  */
         (rconst_symbols[25], {HO2m: 1, H2O: 1}, {HO2m: -1, H2O: -1, H2O2: 1, OHm: 1}, "HO2- + H2O  -> H2O2 + OH-"),
-        (rconst_symbols[26], {H: 1}, {H: -1, em: 1, Hp: 1}, "H           -> e-   + H+"),
-        (rconst_symbols[27], {em: 1, Hp: 1}, {em: -1, Hp: -1, H: 1}, "e-   + H+   -> H"),
-        (rconst_symbols[28], {em: 1, H2O: 1}, {em: -1, H2O: -1, H: 1, OHm: 1}, "e-   + H2O  -> H    + OH-"),
-        (rconst_symbols[29], {H: 1, OHm: 1}, {H: -1, OHm: -1, em: 1, H2O: 1}, "H    + OH-  -> e-   + H2O"),
+        (rconst_symbols[26], {H: 1, H2O: 1}, {H: -1, em: 1, H2O: 0, Hp: 1}, "H + H2O  -> e- + H2O + H+"),
+        (rconst_symbols[27], {em: 1, H2O: 1, Hp: 1}, {em: -1, H2O: 0, Hp: -1, H: 1}, "e- + H2O + H+   -> H + H2O"),
+        (rconst_symbols[28], {em: 1, H2O: 2}, {em: -1, H2O: -1, H: 1, OHm: 1}, "e-   + 2H2O  -> H    + OH- + H2O"),
+        (rconst_symbols[29], {H: 1, OHm: 1, H2O: 1}, {H: -1, OHm: -1, em: 1, H2O: 1}, "H    + OH-  + H2O -> e-   + 2H2O"),
 
         # # /* v31-v35*/
         # (0, 0, -1, 0, 0,    0, 0, 0, 0, 0,    0, 1, 1, 0),   # /* OH          -> H+   + O-   */
@@ -235,8 +235,8 @@ class RadChemModel:
         # (0, 0, 0, 0, -1,    0, 0, 0, 0, 0,    0, 0, -1, 1),  # /* O-   + O2   -> O3-         */
         (rconst_symbols[40], {OH: 1, HO2m: 1}, {OH: -1, HO2m: -1, OHm: 1, HO2: 1}, "OH   + HO2- -> OH-  + HO2"),
         (rconst_symbols[41], {OH: 1, Om: 1}, {OH: -1, Om: -1, HO2m: 1}, "OH   + O-   -> HO2-"),
-        (rconst_symbols[42], {em: 1, HO2m: 1}, {em: -1, HO2m: -1, Om: 1, OHm: 1}, "e-   + HO2- -> O-   + OH-"),
-        (rconst_symbols[43], {em: 1, Om: 1}, {em: -1, Om: -1, OHm: 2}, "e-   + O-   -> 2OH-"),
+        (rconst_symbols[42], {em: 1, H2O: 1, HO2m: 1}, {em: -1, HO2m: -1, H2O: 0, Om: 1, OHm: 1}, "e- + H2O + HO2- -> O- + H2O + OH-"),
+        (rconst_symbols[43], {em: 1, H2O: 1, Om: 1}, {em: -1, Om: -1, H2O: -1, OHm: 2}, "e- + H2O + O-   -> 2OH-"),
         (rconst_symbols[44], {Om: 1, O2: 1}, {Om: -1, O2: -1, O3m: 1}, "O-   + O2   -> O3-"),
 
         # # /* v46-v50*/
@@ -248,10 +248,8 @@ class RadChemModel:
         (rconst_symbols[45], {O3m: 1}, {O3m: -1, O2: 1, Om: 1}, "O3-         -> O2   + O-"),
         (rconst_symbols[46], {Om: 1, HO2m: 1}, {Om: -1, HO2m: -1, O2m: 1, OHm: 1}, "O-   + HO2- -> O2-  + OH-"),
         (rconst_symbols[47], {Om: 1, O2m: 1}, {Om: -1, O2m: -1, OHm: 2, O2: 1}, "O-   + O2-  -> 2OH- + O2"),
-        (rconst_symbols[48], {HO2: 1, H2O2: 1}, {HO2: -1, H2O2: -1, OH: 1, H2O: 1, O2: 1},
-         "HO2  + H2O2 -> OH   + H2O + O2"),
-        (rconst_symbols[49], {O2m: 1, H2O2: 1}, {O2m: -1, H2O2: -1, OHm: 1, OH: 1, O2: 1},
-         "O2-  + H2O2 -> OH-  + OH  + O2"),
+        (rconst_symbols[48], {HO2: 1, H2O2: 1}, {HO2: -1, H2O2: -1, OH: 1, H2O: 1, O2: 1}, "HO2  + H2O2 -> OH   + H2O + O2"),
+        (rconst_symbols[49], {O2m: 1, H2O2: 1}, {O2m: -1, H2O2: -1, OHm: 1, OH: 1, O2: 1}, "O2-  + H2O2 -> OH-  + OH  + O2"),
 
         # # /* irradiation: creation of aquaous electrons */
         # (1, 0, 0, 0, 0,    0, 0, 0, 0, 0,    0, 0, 0, 0)     # /*             -> e-              */
