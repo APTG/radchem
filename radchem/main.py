@@ -9,6 +9,7 @@ from typing import Optional, List, Sequence
 import matplotlib.pylab as plt  # type: ignore
 import numpy as np  # type: ignore
 from scipy.integrate import solve_ivp  # type: ignore
+from tqdm import tqdm  # type: ignore
 
 from model import RadChemModel
 
@@ -115,7 +116,7 @@ class Source:
             return 0.0
 
 
-def dCdt(C: Sequence[float], t: float, model: RadChemModel, source: Optional[Source] = None) -> Sequence[float]:
+def dCdt(C: Sequence[float], t: float, model: RadChemModel, source: Optional[Source] = None, progress_bar=None) -> Sequence[float]:
     """
     Differential equation describing the change in concentration as a function of time.
 
@@ -128,7 +129,7 @@ def dCdt(C: Sequence[float], t: float, model: RadChemModel, source: Optional[Sou
     dCi(t)/dt : change in concentration of all species i at time t. [mol/liter/sec]
     """
     logger.info("t = {}".format(t))
-    print("t = {}".format(t))
+    progress_bar.update()  # update progress bar
 
     dCdt_vec = model.dCdt_f(C, t)
     # check first if any new ions are created due to irradiation
@@ -142,17 +143,17 @@ def dCdt(C: Sequence[float], t: float, model: RadChemModel, source: Optional[Sou
     return dCdt_vec
 
 
-def dCdt2(t: float, C: Sequence[float], model: RadChemModel, source: Optional[Source] = None) -> Sequence[float]:
-    return dCdt(C, t, model, source)
+def dCdt2(t: float, C: Sequence[float], model: RadChemModel, source: Optional[Source] = None, progress_bar=None) -> Sequence[float]:
+    return dCdt(C, t, model, source, progress_bar)
 
 
-def dCdt_Jac(C: Sequence[float], t: float, model: RadChemModel, source: Optional[Source] = None) -> Sequence[float]:
+def dCdt_Jac(C: Sequence[float], t: float, model: RadChemModel, source: Optional[Source] = None, progress_bar=None) -> Sequence[float]:
     dCdt_jac_res = model.dCdt_Jac_f(C, t, model, source)
     return dCdt_jac_res
 
 
-def dCdt_Jac2(t: float, C: Sequence[float], model: RadChemModel, source: Optional[Source] = None) -> Sequence[float]:
-    return dCdt_Jac(C, t, model, source)
+def dCdt_Jac2(t: float, C: Sequence[float], model: RadChemModel, source: Optional[Source] = None, progress_bar=None) -> Sequence[float]:
+    return dCdt_Jac(C, t, model, source, progress_bar)
 
 
 def C(t: Sequence[float], C0: Sequence[float], model: RadChemModel, source: Optional[Source] = None) -> List[float]:
@@ -163,33 +164,25 @@ def C(t: Sequence[float], C0: Sequence[float], model: RadChemModel, source: Opti
     source : beam source
     """
 
-    # if source:
-    #     edges = source.beam_edges()
-    #     dense_grid = np.arange(start=0, stop=source.duration, step=1e-5)  # 1 ms grid
-    #     crit_point = np.sort(np.hstack([dense_grid, edges]))
-    #     crit_point = np.logspace(start=1e-11, stop=source.duration, num=1000)
-    # else:
-    #     crit_point = None
-    # sol, info_dict = odeint(dCdt, C0, t, args=(model, source),
-    # Dfun=model.dCdt_Jac_f, full_output=True, tcrit=crit_point)
-    # sol, info_dict = odeint(dCdt, C0, t, args=(model, source), full_output=True, tcrit=crit_point)
-
     # new API:
     max_step = 1e-3
     if source:
         max_step = source.plength / 10.0  # TODO: investigate other step limits
 
-    sol = solve_ivp(fun=dCdt2,
-                    t_span=(min(t), max(t)),
-                    y0=C0,
-                    method='BDF',
-                    t_eval=t,
-                    args=(model, source),
-                    jac=dCdt_Jac2,  # TODO: investigate disabling it
-                    rtol=1e-6,  # TODO: investigate default tolerance
-                    max_step=max_step,
-                    #                   vectorized=True,  # TODO investigate parallel version
-                    )
+    expected_no_of_steps = 2 * int((max(t) - min(t)) / max_step)
+
+    with tqdm(total=expected_no_of_steps) as progress_bar:
+        sol = solve_ivp(fun=dCdt2,
+                        t_span=(min(t), max(t)),
+                        y0=C0,
+                        method='BDF',
+                        t_eval=t,
+                        args=(model, source, progress_bar),
+                        jac=dCdt_Jac2,  # TODO: investigate disabling it
+                        rtol=1e-6,  # TODO: investigate default tolerance
+                        max_step=max_step,
+                        #                   vectorized=True,  # TODO investigate parallel version
+                        )
     return sol.y
 
 
@@ -220,14 +213,14 @@ def run():
     start = time.time()
 
     # simulation parameters
-    dose = 20000.0  # [Gy]
-    pulsewidth = 0.05  # [sec]
-    freq = 10.0  # [Hz]
+    dose = 10.0  # [Gy]
+    pulsewidth = 2e-6  # [sec]
+    freq = 100.0  # [Hz]
 
     # simulation interval
-    t_start = -1.0  # simulation start time, beam will only be on at t >= 0 [sec]
-    t_stop = 2.0  # stop at this time. Beam only be on at t >= 0 [sec]
-    steps = 3000
+    t_start = -1e-6  # simulation start time, beam will only be on at t >= 0 [sec]
+    t_stop = 25 * 1e-3  # stop at this time. Beam only be on at t >= 0 [sec]
+    steps = 2500
 
     model = RadChemModel
 
