@@ -258,7 +258,7 @@ class RadChemModel:
     ]
 
     @classmethod
-    @lru_cache
+    @lru_cache(maxsize=100)
     def dCdt_exp(cls) -> list:
         """
         Calculate analytical expression for dCdt
@@ -285,7 +285,7 @@ class RadChemModel:
         return [dCdt[C_symb] for C_symb in cls.species_symbols]
 
     @classmethod
-    @lru_cache
+    @lru_cache(maxsize=100)
     def dCdt_f_lambda(cls) -> Callable[[Sequence[float], float, Sequence[float]], List[float]]:
         return sym.lambdify((cls.species_symbols, cls.t) + (cls.rconst_symbols,), cls.dCdt_exp())
 
@@ -298,7 +298,7 @@ class RadChemModel:
         return dCdt_lambda(concentr, t, cls.rconst_values)
 
     @classmethod
-    @lru_cache
+    @lru_cache(maxsize=100)
     def dCdt_Jac_f_lambda(cls) -> Callable[[Sequence[float], float, Sequence[float]], List[float]]:
         J = sym.Matrix(cls.dCdt_exp()).jacobian(cls.species_symbols)
         dCdt_jac_lambda = sym.lambdify((cls.species_symbols, cls.t) + (cls.rconst_symbols,), J)
